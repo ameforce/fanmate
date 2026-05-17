@@ -14,6 +14,7 @@ class DisplayController {
               const BatteryReading &battery,
               bool tempValid,
               float temperatureC,
+              float humidity,
               uint8_t fanPercent,
               bool servoSweep);
 

@@ -17,6 +17,7 @@ void DebouncedButton::begin(uint8_t pin, bool activeLow) {
   lastReadingDown_ = stableDown_;
   lastChangeMs_ = millis();
   pressStartMs_ = stableDown_ ? lastChangeMs_ : 0;
+  nextRepeatMs_ = stableDown_ ? lastChangeMs_ + Config::BUTTON_REPEAT_START_MS : 0;
   longReported_ = false;
 }
 
@@ -36,13 +37,20 @@ ButtonEvent DebouncedButton::update(uint32_t nowMs) {
     if (stableDown_) {
       event.pressed = true;
       pressStartMs_ = nowMs;
+      nextRepeatMs_ = nowMs + Config::BUTTON_REPEAT_START_MS;
       longReported_ = false;
     } else {
       event.released = true;
+      nextRepeatMs_ = 0;
       if (!longReported_) {
         event.shortPress = true;
       }
     }
+  }
+
+  if (stableDown_ && nextRepeatMs_ != 0 && nowMs >= nextRepeatMs_) {
+    event.repeatPress = true;
+    nextRepeatMs_ = nowMs + Config::BUTTON_REPEAT_INTERVAL_MS;
   }
 
   if (stableDown_ && !longReported_ &&

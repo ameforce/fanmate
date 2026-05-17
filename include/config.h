@@ -26,6 +26,8 @@ constexpr bool BUTTON_ACTIVE_LOW = false;
 constexpr bool BUTTON_USE_INTERNAL_PULLUP = false;
 constexpr uint32_t BUTTON_DEBOUNCE_MS = 35;
 constexpr uint32_t BUTTON_LONG_PRESS_MS = 900;
+constexpr uint32_t BUTTON_REPEAT_START_MS = 450;
+constexpr uint32_t BUTTON_REPEAT_INTERVAL_MS = 140;
 
 // I2C / display.
 constexpr uint32_t I2C_CLOCK_HZ = 100000;

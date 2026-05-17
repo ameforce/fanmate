@@ -7,6 +7,7 @@ struct ButtonEvent {
   bool released = false;
   bool shortPress = false;
   bool longPress = false;
+  bool repeatPress = false;
   bool isDown = false;
   bool rawLevel = false;
 };
@@ -29,6 +30,7 @@ class DebouncedButton {
   bool longReported_ = false;
   uint32_t lastChangeMs_ = 0;
   uint32_t pressStartMs_ = 0;
+  uint32_t nextRepeatMs_ = 0;
 };
 
 struct ButtonEvents {

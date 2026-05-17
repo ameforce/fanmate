@@ -216,8 +216,12 @@ void logIntegratedStatus(uint32_t now) {
   if (dht.valid) {
     Serial.print(dht.smoothedTemperatureC, 1);
     Serial.print(F("C"));
+    Serial.print(F(" humidity="));
+    Serial.print(dht.humidity, 0);
+    Serial.print(F("%"));
   } else {
     Serial.print(F("--.-C"));
+    Serial.print(F(" humidity=--%"));
   }
   Serial.print(F(" servoSweep="));
   Serial.println(servoController.sweepEnabled() ? F("on") : F("off"));
@@ -268,7 +272,14 @@ void setupMode() {
 
 void loopMode(uint32_t now) {
   BatteryReading emptyBattery;
-  displayController.update(now, AppMode::Off, emptyBattery, true, 25.0f, 0, false);
+  displayController.update(now,
+                           AppMode::Off,
+                           emptyBattery,
+                           true,
+                           25.0f,
+                           50.0f,
+                           0,
+                           false);
 }
 #elif defined(APP_MODE_INA219_TEST)
 void setupMode() {
@@ -398,7 +409,11 @@ void handleIntegratedButtons(const ButtonEvents &events) {
     applyModeFanOutput();
   }
 
-  if (appMode == AppMode::Manual && events.up.shortPress) {
+  if (events.up.pressed || events.up.repeatPress) {
+    if (appMode != AppMode::Manual) {
+      appMode = AppMode::Manual;
+      Serial.println(F("UP: mode=MANUAL"));
+    }
     manualFanPercent = clampPercent(static_cast<int>(manualFanPercent) + 1);
     Serial.print(F("UP: manual fan="));
     Serial.print(manualFanPercent);
@@ -406,7 +421,11 @@ void handleIntegratedButtons(const ButtonEvents &events) {
     applyModeFanOutput();
   }
 
-  if (appMode == AppMode::Manual && events.down.shortPress) {
+  if (events.down.pressed || events.down.repeatPress) {
+    if (appMode != AppMode::Manual) {
+      appMode = AppMode::Manual;
+      Serial.println(F("DOWN: mode=MANUAL"));
+    }
     manualFanPercent = clampPercent(static_cast<int>(manualFanPercent) - 1);
     Serial.print(F("DOWN: manual fan="));
     Serial.print(manualFanPercent);
@@ -465,6 +484,7 @@ void loopMode(uint32_t now) {
                            battery.reading(),
                            dht.valid,
                            dht.valid ? dht.smoothedTemperatureC : NAN,
+                           dht.valid ? dht.humidity : NAN,
                            getFanPercent(),
                            servoController.sweepEnabled());
   logIntegratedStatus(now);

@@ -118,13 +118,16 @@ The servo initializes to 90 degrees. Send `s` to toggle the 60-120 degree sweep.
 ### integrated
 - MODE short press: `OFF -> MANUAL -> AUTO -> OFF`
 - MODE long press: servo sweep on/off
-- UP/DOWN short press in MANUAL: fan speed +1/-1%
+- UP/DOWN press: switch to MANUAL immediately and adjust fan speed +1/-1%
+- UP/DOWN hold: repeat +1/-1% continuously after a short delay
 - AUTO: smoothed DHT11 temperature maps 22C to 0% and 34C to 100%
+- OLED: larger fan percent, battery, temperature, humidity, and servo state
 
 Verified integrated behavior:
 - Boot initializes OLED, INA219, DHT11, servo, and fan PWM without halting.
 - OFF keeps fan at 0%.
 - MANUAL UP/DOWN changes fan speed one percent per click.
+- Holding UP/DOWN repeats one-percent fan adjustments.
 - AUTO uses the proportional smoothed temperature curve.
 - MODE long press toggles servo sweep; sweep remains off by default.
 

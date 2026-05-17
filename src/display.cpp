@@ -35,6 +35,15 @@ void printTemperature(float temperatureC, bool valid) {
     display.print(F("--.- C"));
   }
 }
+
+void printHumidity(float humidity, bool valid) {
+  if (valid && !isnan(humidity)) {
+    display.print(humidity, 0);
+    display.print(F("%"));
+  } else {
+    display.print(F("--%"));
+  }
+}
 }  // namespace
 
 bool DisplayController::begin() {
@@ -88,6 +97,7 @@ void DisplayController::update(uint32_t nowMs,
                                const BatteryReading &battery,
                                bool tempValid,
                                float temperatureC,
+                               float humidity,
                                uint8_t fanPercent,
                                bool servoSweep) {
   if (!available_ || (nowMs - lastUpdateMs_) < Config::DISPLAY_UPDATE_MS) {
@@ -96,35 +106,48 @@ void DisplayController::update(uint32_t nowMs,
   lastUpdateMs_ = nowMs;
 
   display.clearDisplay();
-  display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
-  display.setCursor(0, 0);
 
-  display.print(F("Battery: "));
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.print(modeName(mode));
+  display.setCursor(58, 0);
+  display.print(F("Batt "));
   if (battery.available && !isnan(battery.calibratedVoltage)) {
     display.print(battery.percent);
-    display.print(F("% "));
-    if (battery.critical) {
-      display.print(F("CRIT"));
-    } else if (battery.lowWarning) {
-      display.print(F("LOW"));
-    }
+    display.print(F("%"));
   } else {
     display.print(F("--%"));
   }
-  display.println();
 
-  display.print(F("Mode: "));
-  display.println(modeName(mode));
-
-  display.print(F("Temp: "));
-  printTemperature(temperatureC, tempValid);
-  display.println();
-
-  display.print(F("Fan: "));
+  display.setTextSize(2);
+  display.setCursor(0, 12);
+  display.print(F("Fan "));
   display.print(fanPercent);
-  display.println(F("%"));
+  display.print(F("%"));
 
+  display.setTextSize(1);
+  display.setCursor(0, 34);
+  display.print(F("T "));
+  printTemperature(temperatureC, tempValid);
+  display.print(F("  H "));
+  printHumidity(humidity, tempValid);
+
+  display.setCursor(0, 45);
+  display.print(F("V "));
+  if (battery.available && !isnan(battery.calibratedVoltage)) {
+    display.print(battery.calibratedVoltage, 2);
+    display.print(F("V"));
+    if (battery.critical) {
+      display.print(F(" CRIT"));
+    } else if (battery.lowWarning) {
+      display.print(F(" LOW"));
+    }
+  } else {
+    display.print(F("--.--V"));
+  }
+
+  display.setCursor(0, 56);
   display.print(F("Servo: "));
   display.println(servoSweep ? F("SWEEP") : F("OFF"));
 
