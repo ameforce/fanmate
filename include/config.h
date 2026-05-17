@@ -36,7 +36,7 @@ constexpr uint8_t OLED_ADDR_SECONDARY = 0x3D;
 constexpr int OLED_RESET_PIN = -1;
 constexpr int OLED_WIDTH = 128;
 constexpr int OLED_HEIGHT = 64;
-constexpr uint32_t DISPLAY_UPDATE_MS = 200;
+constexpr uint32_t DISPLAY_UPDATE_MS = 100;
 
 // INA219 / battery.
 constexpr uint8_t INA219_ADDR = 0x40;
