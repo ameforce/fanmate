@@ -58,8 +58,8 @@ constexpr uint8_t AUTO_FAN_DEADBAND_PERCENT = 1;
 
 // Servo.
 constexpr int SERVO_BOOT_ANGLE = 90;
-constexpr int SERVO_MIN_ANGLE = 60;
-constexpr int SERVO_MAX_ANGLE = 120;
+constexpr int SERVO_MIN_ANGLE = 30;
+constexpr int SERVO_MAX_ANGLE = 150;
 constexpr int SERVO_STEP_DEGREES = 1;
 constexpr uint32_t SERVO_STEP_INTERVAL_MS = 50;
 constexpr int SERVO_MIN_PULSE_US = 500;

@@ -113,7 +113,7 @@ If the fan runs faster at lower logical values, set `FAN_PWM_INVERTED` in `inclu
 Verified hardware behavior: boot 0% keeps the fan stopped, 25% starts the fan, and 0% stops it again. `FAN_PWM_INVERTED` is `false`.
 
 ### servo_test
-The servo initializes to 90 degrees. Send `s` to toggle the 60-120 degree sweep. Sweep is off at boot.
+The servo initializes to 90 degrees. Send `s` to toggle the 30-150 degree sweep. Sweep is off at boot.
 
 ### integrated
 - MODE short press: `OFF -> MANUAL -> AUTO -> OFF`
