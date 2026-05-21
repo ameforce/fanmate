@@ -92,15 +92,16 @@ The firmware tries `0x3C` and then `0x3D`. OLED failure is logged and does not h
 Expected output shape:
 
 ```text
-INA219 bus=7.820V shunt=0.300mV candidate=7.820V selected=7.820V percent=73%
+INA219 bus=7.820V shunt=0.300mV candidate=7.820V raw=7.820V filtered=7.810V rawPercent=76% percent=75%
 ```
 
-Compare `selected` with a multimeter across the 2S pack. Adjust `BATTERY_VOLTAGE_OFFSET`, `BATTERY_VOLTAGE_SCALE`, or `BATTERY_INCLUDE_SHUNT_CORRECTION` in `include/config.h`.
+Compare `raw` with a multimeter across the 2S pack. Adjust `BATTERY_VOLTAGE_OFFSET`, `BATTERY_VOLTAGE_SCALE`, or `BATTERY_INCLUDE_SHUNT_CORRECTION` in `include/config.h`.
 
-For the verified wiring, VIN- is on BMS P+ and VIN+ is on the load-side positive line. `selected` currently uses bus voltage without shunt correction.
+For the verified wiring, VIN- is on BMS P+ and VIN+ is on the load-side positive line. The raw voltage currently uses bus voltage without shunt correction. OLED battery percent uses a filtered voltage so fan load spikes do not immediately swing the displayed percentage.
 
 ### dht_test
 DHT11 is read every 2.2 seconds or slower. Failures are logged without blocking.
+If the module consistently differs from a trusted room thermometer, set `DHT_TEMP_OFFSET_C` in `include/config.h`.
 
 ### fan_pwm_test
 The fan starts at 0%. It changes speed only through explicit Serial commands:
@@ -121,7 +122,9 @@ The servo initializes to 90 degrees. Send `s` to toggle the 10-170 degree sweep.
 - UP/DOWN press: switch to MANUAL immediately and adjust fan speed +1/-1%
 - UP/DOWN hold: repeat +1/-1% continuously after a short delay
 - AUTO: smoothed DHT11 temperature maps 22C to 0% and 34C to 100%
-- OLED: larger fan percent, battery, temperature, humidity, and servo state
+- OLED: larger fan percent, battery, temperature, humidity, estimated remaining time, and servo state
+
+Remaining time is an estimate from `BATTERY_PACK_CAPACITY_MAH`, `BATTERY_PACK_NOMINAL_V`, `SYSTEM_IDLE_POWER_W`, `FAN_FULL_POWER_W`, and `SERVO_SWEEP_POWER_W` in `include/config.h`. Calibrate those constants after measuring the actual pack capacity and fan power draw.
 
 Verified integrated behavior:
 - Boot initializes OLED, INA219, DHT11, servo, and fan PWM without halting.

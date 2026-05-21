@@ -62,9 +62,13 @@ void printBatteryReading(const BatteryReading &reading) {
   Serial.print(reading.shuntVoltageMv, 3);
   Serial.print(F("mV candidate="));
   Serial.print(reading.candidateLoadVoltage, 3);
-  Serial.print(F("V selected="));
+  Serial.print(F("V raw="));
+  Serial.print(reading.rawCalibratedVoltage, 3);
+  Serial.print(F("V filtered="));
   Serial.print(reading.calibratedVoltage, 3);
-  Serial.print(F("V percent="));
+  Serial.print(F("V rawPercent="));
+  Serial.print(reading.rawPercent);
+  Serial.print(F("% percent="));
   Serial.print(reading.percent);
   Serial.print(F("%"));
   if (reading.critical) {
@@ -95,6 +99,28 @@ uint8_t fanPercentFromTemperature(float temperatureC) {
   float ratio = (temperatureC - Config::AUTO_TEMP_MIN_C) /
                 (Config::AUTO_TEMP_MAX_C - Config::AUTO_TEMP_MIN_C);
   return clampPercent(static_cast<int>(ratio * 100.0f + 0.5f));
+}
+
+float estimateRemainingMinutes(const BatteryReading &reading,
+                               uint8_t fanPercent,
+                               bool servoSweep) {
+  if (!reading.available) {
+    return NAN;
+  }
+  float capacityWh =
+      (Config::BATTERY_PACK_CAPACITY_MAH / 1000.0f) *
+      Config::BATTERY_PACK_NOMINAL_V;
+  float remainingWh = capacityWh * (static_cast<float>(reading.percent) / 100.0f);
+  float powerW = Config::SYSTEM_IDLE_POWER_W +
+                 Config::FAN_FULL_POWER_W *
+                     (static_cast<float>(fanPercent) / 100.0f);
+  if (servoSweep) {
+    powerW += Config::SERVO_SWEEP_POWER_W;
+  }
+  if (remainingWh <= 0.0f || powerW <= 0.0f) {
+    return 0.0f;
+  }
+  return (remainingWh / powerW) * 60.0f;
 }
 
 void applyModeFanOutput() {
@@ -223,6 +249,15 @@ void logIntegratedStatus(uint32_t now) {
     Serial.print(F("--.-C"));
     Serial.print(F(" humidity=--%"));
   }
+  Serial.print(F(" remain="));
+  float remainingMinutes =
+      estimateRemainingMinutes(battery.reading(), getFanPercent(), servoController.sweepEnabled());
+  if (isnan(remainingMinutes)) {
+    Serial.print(F("--"));
+  } else {
+    Serial.print(remainingMinutes, 0);
+    Serial.print(F("m"));
+  }
   Serial.print(F(" servoSweep="));
   Serial.println(servoController.sweepEnabled() ? F("on") : F("off"));
 }
@@ -279,6 +314,7 @@ void loopMode(uint32_t now) {
                            25.0f,
                            50.0f,
                            0,
+                           NAN,
                            false);
 }
 #elif defined(APP_MODE_INA219_TEST)
@@ -309,6 +345,10 @@ void loopMode(uint32_t now) {
     if (reading.valid) {
       Serial.print(F("DHT temp="));
       Serial.print(reading.temperatureC, 1);
+      if (Config::DHT_TEMP_OFFSET_C != 0.0f) {
+        Serial.print(F("C raw="));
+        Serial.print(reading.rawTemperatureC, 1);
+      }
       Serial.print(F("C smooth="));
       Serial.print(reading.smoothedTemperatureC, 1);
       Serial.print(F("C humidity="));
@@ -457,6 +497,10 @@ void loopMode(uint32_t now) {
     if (dht.valid) {
       Serial.print(F("DHT temp="));
       Serial.print(dht.temperatureC, 1);
+      if (Config::DHT_TEMP_OFFSET_C != 0.0f) {
+        Serial.print(F("C raw="));
+        Serial.print(dht.rawTemperatureC, 1);
+      }
       Serial.print(F("C smooth="));
       Serial.print(dht.smoothedTemperatureC, 1);
       Serial.print(F("C humidity="));
@@ -486,6 +530,9 @@ void loopMode(uint32_t now) {
                            dht.valid ? dht.smoothedTemperatureC : NAN,
                            dht.valid ? dht.humidity : NAN,
                            getFanPercent(),
+                           estimateRemainingMinutes(battery.reading(),
+                                                    getFanPercent(),
+                                                    servoController.sweepEnabled()),
                            servoController.sweepEnabled());
   logIntegratedStatus(now);
 }

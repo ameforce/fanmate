@@ -44,6 +44,30 @@ void printHumidity(float humidity, bool valid) {
     display.print(F("--%"));
   }
 }
+
+void printRemaining(float remainingMinutes) {
+  if (isnan(remainingMinutes) || remainingMinutes < 0.0f) {
+    display.print(F("--"));
+    return;
+  }
+  if (remainingMinutes >= 600.0f) {
+    display.print(F("10h+"));
+    return;
+  }
+  if (remainingMinutes >= 60.0f) {
+    int totalMinutes = static_cast<int>(remainingMinutes + 0.5f);
+    display.print(totalMinutes / 60);
+    display.print(F("h"));
+    int minutes = totalMinutes % 60;
+    if (minutes < 10) {
+      display.print(F("0"));
+    }
+    display.print(minutes);
+    return;
+  }
+  display.print(static_cast<int>(remainingMinutes + 0.5f));
+  display.print(F("m"));
+}
 }  // namespace
 
 bool DisplayController::begin() {
@@ -99,6 +123,7 @@ void DisplayController::update(uint32_t nowMs,
                                float temperatureC,
                                float humidity,
                                uint8_t fanPercent,
+                               float remainingMinutes,
                                bool servoSweep) {
   if (!available_ || (nowMs - lastUpdateMs_) < Config::DISPLAY_UPDATE_MS) {
     return;
@@ -145,6 +170,10 @@ void DisplayController::update(uint32_t nowMs,
     }
   } else {
     display.print(F("--.--V"));
+  }
+  if (!battery.critical && !battery.lowWarning) {
+    display.print(F(" R "));
+    printRemaining(remainingMinutes);
   }
 
   display.setCursor(0, 56);

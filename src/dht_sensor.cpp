@@ -19,13 +19,15 @@ bool DhtSensor::update(uint32_t nowMs, bool force) {
   lastReadAttemptMs_ = nowMs;
 
   float humidity = dht.readHumidity();
-  float temperature = dht.readTemperature();
-  if (isnan(humidity) || isnan(temperature)) {
+  float rawTemperature = dht.readTemperature();
+  if (isnan(humidity) || isnan(rawTemperature)) {
     return true;
   }
+  float temperature = rawTemperature + Config::DHT_TEMP_OFFSET_C;
 
   reading_.valid = true;
   reading_.humidity = humidity;
+  reading_.rawTemperatureC = rawTemperature;
   reading_.temperatureC = temperature;
   reading_.lastValidMs = nowMs;
   if (isnan(reading_.smoothedTemperatureC)) {

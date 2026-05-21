@@ -4,6 +4,7 @@
 
 struct DhtReading {
   bool valid = false;
+  float rawTemperatureC = NAN;
   float temperatureC = NAN;
   float humidity = NAN;
   float smoothedTemperatureC = NAN;

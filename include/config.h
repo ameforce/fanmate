@@ -44,11 +44,19 @@ constexpr uint32_t BATTERY_UPDATE_MS = 1000;
 constexpr float BATTERY_VOLTAGE_OFFSET = 0.0f;
 constexpr float BATTERY_VOLTAGE_SCALE = 1.0f;
 constexpr bool BATTERY_INCLUDE_SHUNT_CORRECTION = false;
+constexpr float BATTERY_FILTER_ALPHA_DROP = 0.05f;
+constexpr float BATTERY_FILTER_ALPHA_RECOVER = 0.20f;
 constexpr float BATTERY_LOW_WARNING_V = 6.6f;
 constexpr float BATTERY_CRITICAL_V = 6.2f;
+constexpr float BATTERY_PACK_CAPACITY_MAH = 2000.0f;
+constexpr float BATTERY_PACK_NOMINAL_V = 7.4f;
+constexpr float SYSTEM_IDLE_POWER_W = 0.8f;
+constexpr float FAN_FULL_POWER_W = 12.0f;
+constexpr float SERVO_SWEEP_POWER_W = 0.5f;
 
 // DHT11.
 constexpr uint32_t DHT_READ_INTERVAL_MS = 2200;
+constexpr float DHT_TEMP_OFFSET_C = 0.0f;
 constexpr float DHT_SMOOTHING_ALPHA = 0.20f;
 
 // AUTO fan curve.

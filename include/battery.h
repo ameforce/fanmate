@@ -8,7 +8,10 @@ struct BatteryReading {
   float shuntVoltageMv = NAN;
   float candidateLoadVoltage = NAN;
   float selectedVoltage = NAN;
+  float rawCalibratedVoltage = NAN;
+  float filteredVoltage = NAN;
   float calibratedVoltage = NAN;
+  uint8_t rawPercent = 0;
   uint8_t percent = 0;
   bool lowWarning = false;
   bool critical = false;

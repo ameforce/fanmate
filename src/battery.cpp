@@ -44,9 +44,21 @@ bool BatteryMonitor::update(uint32_t nowMs, bool force) {
   reading_.selectedVoltage = Config::BATTERY_INCLUDE_SHUNT_CORRECTION
                                  ? reading_.candidateLoadVoltage
                                  : reading_.busVoltage;
-  reading_.calibratedVoltage =
+  reading_.rawCalibratedVoltage =
       (reading_.selectedVoltage * Config::BATTERY_VOLTAGE_SCALE) +
       Config::BATTERY_VOLTAGE_OFFSET;
+  if (isnan(reading_.filteredVoltage)) {
+    reading_.filteredVoltage = reading_.rawCalibratedVoltage;
+  } else {
+    float alpha = reading_.rawCalibratedVoltage < reading_.filteredVoltage
+                      ? Config::BATTERY_FILTER_ALPHA_DROP
+                      : Config::BATTERY_FILTER_ALPHA_RECOVER;
+    reading_.filteredVoltage =
+        (alpha * reading_.rawCalibratedVoltage) +
+        ((1.0f - alpha) * reading_.filteredVoltage);
+  }
+  reading_.calibratedVoltage = reading_.filteredVoltage;
+  reading_.rawPercent = percentFromVoltage(reading_.rawCalibratedVoltage);
   reading_.percent = percentFromVoltage(reading_.calibratedVoltage);
   reading_.lowWarning =
       reading_.calibratedVoltage <= Config::BATTERY_LOW_WARNING_V;

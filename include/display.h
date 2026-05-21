@@ -16,6 +16,7 @@ class DisplayController {
               float temperatureC,
               float humidity,
               uint8_t fanPercent,
+              float remainingMinutes,
               bool servoSweep);
 
  private:
