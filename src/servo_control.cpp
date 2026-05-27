@@ -23,10 +23,10 @@ bool ServoController::begin() {
   return attached_;
 }
 
-void ServoController::update(uint32_t nowMs) {
+bool ServoController::update(uint32_t nowMs) {
   if (!attached_ || !sweepEnabled_ ||
       (nowMs - lastStepMs_) < Config::SERVO_STEP_INTERVAL_MS) {
-    return;
+    return false;
   }
   lastStepMs_ = nowMs;
 
@@ -39,6 +39,37 @@ void ServoController::update(uint32_t nowMs) {
     direction_ = 1;
   }
   servo.write(currentAngle_);
+  return true;
+}
+
+void ServoController::writeAngle(int angle) {
+  if (angle < Config::SERVO_MIN_ANGLE) {
+    angle = Config::SERVO_MIN_ANGLE;
+  } else if (angle > Config::SERVO_MAX_ANGLE) {
+    angle = Config::SERVO_MAX_ANGLE;
+  }
+  currentAngle_ = angle;
+  sweepEnabled_ = false;
+  direction_ = 1;
+  lastStepMs_ = millis();
+  if (attached_) {
+    servo.write(currentAngle_);
+  }
+}
+
+void ServoController::restoreState(int angle, bool sweepEnabled) {
+  if (angle < Config::SERVO_MIN_ANGLE) {
+    angle = Config::SERVO_MIN_ANGLE;
+  } else if (angle > Config::SERVO_MAX_ANGLE) {
+    angle = Config::SERVO_MAX_ANGLE;
+  }
+  currentAngle_ = angle;
+  sweepEnabled_ = sweepEnabled;
+  direction_ = currentAngle_ >= Config::SERVO_MAX_ANGLE ? -1 : 1;
+  lastStepMs_ = millis();
+  if (attached_) {
+    servo.write(currentAngle_);
+  }
 }
 
 void ServoController::setSweepEnabled(bool enabled) {

@@ -56,16 +56,27 @@ constexpr float SERVO_SWEEP_POWER_W = 0.5f;
 
 // DHT11.
 constexpr uint32_t DHT_READ_INTERVAL_MS = 2200;
-constexpr float DHT_TEMP_OFFSET_C = 0.0f;
+constexpr float DHT_TEMP_OFFSET_C = -2.6f;
 constexpr float DHT_SMOOTHING_ALPHA = 0.20f;
 
 // AUTO fan curve.
-constexpr float AUTO_TEMP_MIN_C = 22.0f;
-constexpr float AUTO_TEMP_MAX_C = 34.0f;
+constexpr float AUTO_TEMP_IDLE_C = 22.0f;
+constexpr uint8_t AUTO_FAN_IDLE_PERCENT = 0;
+constexpr float AUTO_TEMP_COMFORT_C = 26.0f;
+constexpr uint8_t AUTO_FAN_COMFORT_PERCENT = 13;
+constexpr float AUTO_TEMP_WARM_C = 34.0f;
+constexpr uint8_t AUTO_FAN_WARM_PERCENT = 50;
+constexpr float AUTO_TEMP_HOT_C = 44.0f;
+constexpr uint8_t AUTO_FAN_HOT_PERCENT = 100;
 constexpr uint8_t AUTO_FAN_DEADBAND_PERCENT = 1;
 
+// Persistent runtime state.
+constexpr uint32_t PERSIST_MANUAL_DEBOUNCE_MS = 2000;
+constexpr uint32_t PERSIST_AUTO_SAVE_INTERVAL_MS = 30000;
+constexpr uint32_t PERSIST_SERVO_SAVE_INTERVAL_MS = 10000;
+
 // Servo.
-constexpr int SERVO_BOOT_ANGLE = 90;
+constexpr int SERVO_BOOT_ANGLE = 70;
 constexpr int SERVO_MIN_ANGLE = 10;
 constexpr int SERVO_MAX_ANGLE = 170;
 constexpr int SERVO_STEP_DEGREES = 1;

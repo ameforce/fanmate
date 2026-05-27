@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <math.h>
 #include "app_state.h"
+#include "app_persistence.h"
 #include "battery.h"
 #include "buttons.h"
 #include "config.h"
@@ -23,16 +24,24 @@ BatteryMonitor battery;
 ButtonManager buttons;
 DisplayController displayController;
 DhtSensor dhtSensor;
+AppPersistence appPersistence;
 ServoController servoController;
 
 AppMode appMode = AppMode::Off;
 uint8_t manualFanPercent = Config::BOOT_FAN_PERCENT;
 uint8_t autoFanPercent = Config::BOOT_FAN_PERCENT;
+bool autoFanPercentProvisional = false;
+bool manualPersistencePending = false;
+bool autoPersistencePending = false;
+bool servoPersistencePending = false;
 uint32_t lastStatusLogMs = 0;
 uint32_t lastButtonPrintMs = 0;
 uint32_t lastI2cScanMs = 0;
 uint32_t lastFanPromptMs = 0;
 uint32_t lastServoPromptMs = 0;
+uint32_t lastManualChangeMs = 0;
+uint32_t lastAutoSaveMs = 0;
+uint32_t lastServoSaveMs = 0;
 
 void startSerial(const __FlashStringHelper *banner) {
   Serial.begin(Config::SERIAL_BAUD);
@@ -89,16 +98,48 @@ uint8_t clampPercent(int value) {
   return static_cast<uint8_t>(value);
 }
 
+uint8_t interpolateFanPercent(float temperatureC,
+                              float lowerTempC,
+                              uint8_t lowerPercent,
+                              float upperTempC,
+                              uint8_t upperPercent) {
+  if (upperTempC <= lowerTempC) {
+    return clampPercent(upperPercent);
+  }
+  float ratio = (temperatureC - lowerTempC) / (upperTempC - lowerTempC);
+  float percent = static_cast<float>(lowerPercent) +
+                  (static_cast<float>(upperPercent) -
+                   static_cast<float>(lowerPercent)) *
+                      ratio;
+  return clampPercent(static_cast<int>(percent + 0.5f));
+}
+
 uint8_t fanPercentFromTemperature(float temperatureC) {
-  if (isnan(temperatureC) || temperatureC <= Config::AUTO_TEMP_MIN_C) {
-    return 0;
+  if (isnan(temperatureC) || temperatureC <= Config::AUTO_TEMP_IDLE_C) {
+    return Config::AUTO_FAN_IDLE_PERCENT;
   }
-  if (temperatureC >= Config::AUTO_TEMP_MAX_C) {
-    return 100;
+  if (temperatureC <= Config::AUTO_TEMP_COMFORT_C) {
+    return interpolateFanPercent(temperatureC,
+                                 Config::AUTO_TEMP_IDLE_C,
+                                 Config::AUTO_FAN_IDLE_PERCENT,
+                                 Config::AUTO_TEMP_COMFORT_C,
+                                 Config::AUTO_FAN_COMFORT_PERCENT);
   }
-  float ratio = (temperatureC - Config::AUTO_TEMP_MIN_C) /
-                (Config::AUTO_TEMP_MAX_C - Config::AUTO_TEMP_MIN_C);
-  return clampPercent(static_cast<int>(ratio * 100.0f + 0.5f));
+  if (temperatureC <= Config::AUTO_TEMP_WARM_C) {
+    return interpolateFanPercent(temperatureC,
+                                 Config::AUTO_TEMP_COMFORT_C,
+                                 Config::AUTO_FAN_COMFORT_PERCENT,
+                                 Config::AUTO_TEMP_WARM_C,
+                                 Config::AUTO_FAN_WARM_PERCENT);
+  }
+  if (temperatureC <= Config::AUTO_TEMP_HOT_C) {
+    return interpolateFanPercent(temperatureC,
+                                 Config::AUTO_TEMP_WARM_C,
+                                 Config::AUTO_FAN_WARM_PERCENT,
+                                 Config::AUTO_TEMP_HOT_C,
+                                 Config::AUTO_FAN_HOT_PERCENT);
+  }
+  return Config::AUTO_FAN_HOT_PERCENT;
 }
 
 float estimateRemainingMinutes(const BatteryReading &reading,
@@ -137,6 +178,110 @@ void applyModeFanOutput() {
   }
 }
 
+PersistedAppState currentPersistedState() {
+  PersistedAppState state;
+  state.valid = true;
+  state.mode = appMode;
+  state.manualFanPercent = manualFanPercent;
+  state.autoFanPercent = autoFanPercent;
+  state.servoSweepEnabled = servoController.sweepEnabled();
+  state.servoAngle = servoController.currentAngle();
+  return state;
+}
+
+bool persistCurrentState(const __FlashStringHelper *reason, uint32_t now) {
+  if (!appPersistence.available()) {
+    return false;
+  }
+
+  bool ok = appPersistence.save(currentPersistedState());
+  Serial.print(reason);
+  Serial.print(ok ? F(" ok") : F(" failed"));
+  Serial.print(F(" mode="));
+  Serial.print(modeName(appMode));
+  Serial.print(F(" manual="));
+  Serial.print(manualFanPercent);
+  Serial.print(F("% auto="));
+  Serial.print(autoFanPercent);
+  Serial.print(F("% servoSweep="));
+  Serial.print(servoController.sweepEnabled() ? F("on") : F("off"));
+  Serial.print(F(" servoAngle="));
+  Serial.println(servoController.currentAngle());
+  if (ok) {
+    manualPersistencePending = false;
+    autoPersistencePending = false;
+    servoPersistencePending = false;
+    if (appMode == AppMode::Auto) {
+      lastAutoSaveMs = now;
+    }
+    if (servoController.sweepEnabled()) {
+      lastServoSaveMs = now;
+    }
+  }
+  return ok;
+}
+
+void markManualPersistence(uint32_t now) {
+  manualPersistencePending = true;
+  lastManualChangeMs = now;
+}
+
+void markAutoPersistence() {
+  if (appMode == AppMode::Auto) {
+    autoPersistencePending = true;
+  }
+}
+
+void markServoPersistence() {
+  if (servoController.sweepEnabled()) {
+    servoPersistencePending = true;
+  }
+}
+
+void flushPendingPersistence(uint32_t now) {
+  bool manualReady =
+      manualPersistencePending &&
+      (now - lastManualChangeMs) >= Config::PERSIST_MANUAL_DEBOUNCE_MS;
+  bool autoReady =
+      autoPersistencePending &&
+      (lastAutoSaveMs == 0 ||
+       (now - lastAutoSaveMs) >= Config::PERSIST_AUTO_SAVE_INTERVAL_MS);
+  bool servoReady =
+      servoPersistencePending &&
+      (lastServoSaveMs == 0 ||
+       (now - lastServoSaveMs) >= Config::PERSIST_SERVO_SAVE_INTERVAL_MS);
+
+  if (manualReady || autoReady || servoReady) {
+    persistCurrentState(F("Persist deferred"), now);
+  }
+}
+
+void restoreIntegratedState() {
+  PersistedAppState restored = appPersistence.load();
+  if (!restored.valid) {
+    Serial.println(F("Restore defaults: no valid persisted state"));
+    return;
+  }
+
+  appMode = restored.mode;
+  manualFanPercent = restored.manualFanPercent;
+  autoFanPercent = restored.autoFanPercent;
+  autoFanPercentProvisional = appMode == AppMode::Auto;
+  servoController.restoreState(restored.servoAngle, restored.servoSweepEnabled);
+
+  Serial.print(F("Restore state: mode="));
+  Serial.print(modeName(appMode));
+  Serial.print(F(" manual="));
+  Serial.print(manualFanPercent);
+  Serial.print(F("% auto="));
+  Serial.print(autoFanPercent);
+  Serial.print(autoFanPercentProvisional ? F("% provisional") : F("%"));
+  Serial.print(F(" servoSweep="));
+  Serial.print(servoController.sweepEnabled() ? F("on") : F("off"));
+  Serial.print(F(" servoAngle="));
+  Serial.println(servoController.currentAngle());
+}
+
 void printButtonRawLine() {
   Serial.print(F("MODE="));
   Serial.print(digitalRead(Config::BUTTON_MODE_PIN));
@@ -161,6 +306,20 @@ bool parsePercentCommand(const String &command, int &value) {
   }
   value = command.toInt();
   return value >= 0 && value <= 100;
+}
+
+bool parseServoAngleCommand(const String &command, int &value) {
+  if (command.length() == 0) {
+    return false;
+  }
+  for (size_t i = 0; i < command.length(); ++i) {
+    if (!isDigit(command.charAt(i))) {
+      return false;
+    }
+  }
+  value = command.toInt();
+  return value >= Config::SERVO_MIN_ANGLE &&
+         value <= Config::SERVO_MAX_ANGLE;
 }
 
 void handleFanSerial() {
@@ -200,7 +359,7 @@ void handleFanSerial() {
 }
 
 void printServoCommandHelp() {
-  Serial.println(F("Servo commands: s=toggle sweep, c=center, status"));
+  Serial.println(F("Servo commands: s=toggle sweep, c=center, +=+1, -=-1, 10-170=set angle, status"));
 }
 
 void handleServoSerial() {
@@ -213,7 +372,22 @@ void handleServoSerial() {
     servoController.toggleSweep();
   } else if (command == "c") {
     servoController.setSweepEnabled(false);
-    servoController.begin();
+    servoController.writeAngle(Config::SERVO_BOOT_ANGLE);
+  } else if (command == "+") {
+    servoController.writeAngle(servoController.currentAngle() + 1);
+  } else if (command == "-") {
+    servoController.writeAngle(servoController.currentAngle() - 1);
+  } else if (command == "status") {
+    // Print status below.
+  } else {
+    int angle = 0;
+    if (parseServoAngleCommand(command, angle)) {
+      servoController.writeAngle(angle);
+    } else {
+      Serial.print(F("Unknown servo command: "));
+      Serial.println(command);
+      printServoCommandHelp();
+    }
   }
   Serial.print(F("Servo attached="));
   Serial.print(servoController.attached() ? F("yes") : F("no"));
@@ -424,16 +598,22 @@ void setupMode() {
   Serial.print(F("Servo init="));
   Serial.println(servoOk ? F("ok") : F("failed"));
 
-  writeFanPercent(Config::BOOT_FAN_PERCENT);
+  bool persistenceOk = appPersistence.begin();
+  Serial.print(F("Persistence init="));
+  Serial.println(persistenceOk ? F("ok") : F("failed"));
+
+  restoreIntegratedState();
+  applyModeFanOutput();
   displayController.showBoot("Ready");
   logFanState(F("Integrated boot"));
 }
 
-void handleIntegratedButtons(const ButtonEvents &events) {
+void handleIntegratedButtons(const ButtonEvents &events, uint32_t now) {
   if (events.mode.longPress) {
     servoController.toggleSweep();
     Serial.print(F("MODE long: servo sweep "));
     Serial.println(servoController.sweepEnabled() ? F("on") : F("off"));
+    persistCurrentState(F("Persist servo toggle"), now);
   }
 
   if (events.mode.shortPress) {
@@ -447,6 +627,7 @@ void handleIntegratedButtons(const ButtonEvents &events) {
     Serial.print(F("MODE short: mode="));
     Serial.println(modeName(appMode));
     applyModeFanOutput();
+    persistCurrentState(F("Persist mode"), now);
   }
 
   if (events.up.pressed || events.up.repeatPress) {
@@ -459,6 +640,7 @@ void handleIntegratedButtons(const ButtonEvents &events) {
     Serial.print(manualFanPercent);
     Serial.println(F("%"));
     applyModeFanOutput();
+    markManualPersistence(now);
   }
 
   if (events.down.pressed || events.down.repeatPress) {
@@ -471,26 +653,33 @@ void handleIntegratedButtons(const ButtonEvents &events) {
     Serial.print(manualFanPercent);
     Serial.println(F("%"));
     applyModeFanOutput();
+    markManualPersistence(now);
   }
 }
 
-void updateAutoFanFromTemperature() {
+void updateAutoFanFromTemperature(uint32_t now) {
   const DhtReading &dht = dhtSensor.reading();
   if (!dht.valid || isnan(dht.smoothedTemperatureC)) {
+    if (autoFanPercentProvisional) {
+      return;
+    }
     autoFanPercent = 0;
     return;
   }
 
   uint8_t nextAuto = fanPercentFromTemperature(dht.smoothedTemperatureC);
   int delta = static_cast<int>(nextAuto) - static_cast<int>(autoFanPercent);
-  if (abs(delta) >= Config::AUTO_FAN_DEADBAND_PERCENT) {
+  if (autoFanPercentProvisional ||
+      abs(delta) >= Config::AUTO_FAN_DEADBAND_PERCENT) {
     autoFanPercent = nextAuto;
+    autoFanPercentProvisional = false;
+    markAutoPersistence();
   }
 }
 
 void loopMode(uint32_t now) {
   ButtonEvents events = buttons.update(now);
-  handleIntegratedButtons(events);
+  handleIntegratedButtons(events, now);
 
   if (dhtSensor.update(now, false)) {
     const DhtReading &dht = dhtSensor.reading();
@@ -509,7 +698,7 @@ void loopMode(uint32_t now) {
     } else {
       Serial.println(F("DHT read failed"));
     }
-    updateAutoFanFromTemperature();
+    updateAutoFanFromTemperature(now);
     if (appMode == AppMode::Auto) {
       applyModeFanOutput();
     }
@@ -519,8 +708,12 @@ void loopMode(uint32_t now) {
     printBatteryReading(battery.reading());
   }
 
-  servoController.update(now);
+  bool servoMoved = servoController.update(now);
+  if (servoMoved) {
+    markServoPersistence();
+  }
   applyModeFanOutput();
+  flushPendingPersistence(now);
 
   const DhtReading &dht = dhtSensor.reading();
   displayController.update(now,

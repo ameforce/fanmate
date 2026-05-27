@@ -102,6 +102,9 @@ For the verified wiring, VIN- is on BMS P+ and VIN+ is on the load-side positive
 ### dht_test
 DHT11 is read every 2.2 seconds or slower. Failures are logged without blocking.
 If the module consistently differs from a trusted room thermometer, set `DHT_TEMP_OFFSET_C` in `include/config.h`.
+Current calibration applies `DHT_TEMP_OFFSET_C = -2.6f` from one trusted comparison:
+fanmate displayed `28.6C` while the room thermometer read `26.0C`. Recheck this
+offset after changing the sensor location or enclosure airflow.
 
 ### fan_pwm_test
 The fan starts at 0%. It changes speed only through explicit Serial commands:
@@ -114,14 +117,24 @@ If the fan runs faster at lower logical values, set `FAN_PWM_INVERTED` in `inclu
 Verified hardware behavior: boot 0% keeps the fan stopped, 25% starts the fan, and 0% stops it again. `FAN_PWM_INVERTED` is `false`.
 
 ### servo_test
-The servo initializes to 90 degrees. Send `s` to toggle the 10-170 degree sweep. Sweep is off at boot.
+The servo initializes to 70 degrees. Send `s` to toggle the 10-170 degree sweep. Sweep is off at boot. Send a number from `10` to `170`, `+`, `-`, or `c` to calibrate the center angle.
 
 ### integrated
 - MODE short press: `OFF -> MANUAL -> AUTO -> OFF`
 - MODE long press: servo sweep on/off
 - UP/DOWN press: switch to MANUAL immediately and adjust fan speed +1/-1%
 - UP/DOWN hold: repeat +1/-1% continuously after a short delay
-- AUTO: smoothed DHT11 temperature maps 22C to 0% and 34C to 100%
+- AUTO: corrected, smoothed DHT11 temperature maps 22C to 0%, 26C to 13%,
+  34C to 50%, and 44C to 100%, with a 1% update deadband
+- Restore: after safe fan PWM and servo initialization, the firmware restores
+  the last app mode, MANUAL fan percent, last AUTO fan percent, servo sweep
+  state, and servo angle from ESP32 Preferences storage
+- AUTO restore: if the restored mode is AUTO, the last AUTO fan percent is
+  applied immediately until the first valid DHT sample arrives. Failed DHT
+  reads before that first valid sample do not clear the provisional fan output.
+- Persistence writes: MANUAL fan changes are debounced for 2 seconds, AUTO fan
+  output is saved at most every 30 seconds, and servo sweep angle changes are
+  saved at most every 10 seconds; mode and sweep toggles are saved immediately.
 - OLED: larger fan percent, battery, temperature, humidity, estimated remaining time, and servo state
 
 Remaining time is an estimate from `BATTERY_PACK_CAPACITY_MAH`, `BATTERY_PACK_NOMINAL_V`, `SYSTEM_IDLE_POWER_W`, `FAN_FULL_POWER_W`, and `SERVO_SWEEP_POWER_W` in `include/config.h`. Calibrate those constants after measuring the actual pack capacity and fan power draw.
@@ -131,8 +144,9 @@ Verified integrated behavior:
 - OFF keeps fan at 0%.
 - MANUAL UP/DOWN changes fan speed one percent per click.
 - Holding UP/DOWN repeats one-percent fan adjustments.
-- AUTO uses the proportional smoothed temperature curve.
-- MODE long press toggles servo sweep; sweep remains off by default.
+- AUTO uses the calibrated piecewise smoothed temperature curve.
+- MODE long press toggles servo sweep; fresh/default storage keeps sweep off,
+  while a saved sweep state is restored on the next boot.
 
 ## Pin Map
 | Function | Pin |
