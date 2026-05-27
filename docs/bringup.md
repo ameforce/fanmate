@@ -122,8 +122,12 @@ The servo initializes to 70 degrees. Send `s` to toggle the 10-170 degree sweep.
 ### integrated
 - MODE short press: `OFF -> MANUAL -> AUTO -> OFF`
 - MODE long press: servo sweep on/off
-- UP/DOWN press: switch to MANUAL immediately and adjust fan speed +1/-1%
-- UP/DOWN hold: repeat +1/-1% continuously after a short delay
+- UP/DOWN short press: switch to MANUAL and move fan speed through
+  `0 -> 15 -> 30 -> 45 -> 60 -> 75 -> 90 -> 100` boundaries.
+  Non-boundary values snap in the pressed direction, for example `7 -> 15`
+  on UP and `7 -> 0` on DOWN. From `100`, DOWN goes to `90`.
+- UP/DOWN hold: switch to MANUAL immediately and repeat +1/-1% continuously
+  after a short delay without applying the short-press boundary jump.
 - AUTO: corrected, smoothed DHT11 temperature maps 22C to 0%, 26C to 13%,
   34C to 50%, and 44C to 100%, with a 1% update deadband
 - Restore: after safe fan PWM and servo initialization, the firmware restores
@@ -142,8 +146,8 @@ Remaining time is an estimate from `BATTERY_PACK_CAPACITY_MAH`, `BATTERY_PACK_NO
 Verified integrated behavior:
 - Boot initializes OLED, INA219, DHT11, servo, and fan PWM without halting.
 - OFF keeps fan at 0%.
-- MANUAL UP/DOWN changes fan speed one percent per click.
-- Holding UP/DOWN repeats one-percent fan adjustments.
+- MANUAL UP/DOWN short press moves fan speed through the 0/15/30/45/60/75/90/100 boundaries.
+- Holding UP/DOWN repeats one-percent fan adjustments without the short-press boundary jump.
 - AUTO uses the calibrated piecewise smoothed temperature curve.
 - MODE long press toggles servo sweep; fresh/default storage keeps sweep off,
   while a saved sweep state is restored on the next boot.

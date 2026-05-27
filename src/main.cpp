@@ -7,6 +7,7 @@
 #include "config.h"
 #include "dht_sensor.h"
 #include "display.h"
+#include "fan_button_steps.h"
 #include "fan_pwm.h"
 #include "i2c_devices.h"
 #include "servo_control.h"
@@ -34,6 +35,8 @@ bool autoFanPercentProvisional = false;
 bool manualPersistencePending = false;
 bool autoPersistencePending = false;
 bool servoPersistencePending = false;
+FanButtonStepTracker upButtonStep;
+FanButtonStepTracker downButtonStep;
 uint32_t lastStatusLogMs = 0;
 uint32_t lastButtonPrintMs = 0;
 uint32_t lastI2cScanMs = 0;
@@ -224,6 +227,26 @@ bool persistCurrentState(const __FlashStringHelper *reason, uint32_t now) {
 void markManualPersistence(uint32_t now) {
   manualPersistencePending = true;
   lastManualChangeMs = now;
+}
+
+void enterManualFromFanButton(const __FlashStringHelper *prefix) {
+  if (appMode != AppMode::Manual) {
+    appMode = AppMode::Manual;
+    Serial.print(prefix);
+    Serial.println(F(": mode=MANUAL"));
+  }
+}
+
+void applyManualFanButtonPercent(const __FlashStringHelper *prefix,
+                                 uint8_t nextPercent,
+                                 uint32_t now) {
+  manualFanPercent = fanButtonClampPercent(nextPercent);
+  Serial.print(prefix);
+  Serial.print(F(": manual fan="));
+  Serial.print(manualFanPercent);
+  Serial.println(F("%"));
+  applyModeFanOutput();
+  markManualPersistence(now);
 }
 
 void markAutoPersistence() {
@@ -630,30 +653,44 @@ void handleIntegratedButtons(const ButtonEvents &events, uint32_t now) {
     persistCurrentState(F("Persist mode"), now);
   }
 
-  if (events.up.pressed || events.up.repeatPress) {
-    if (appMode != AppMode::Manual) {
-      appMode = AppMode::Manual;
-      Serial.println(F("UP: mode=MANUAL"));
-    }
-    manualFanPercent = clampPercent(static_cast<int>(manualFanPercent) + 1);
-    Serial.print(F("UP: manual fan="));
-    Serial.print(manualFanPercent);
-    Serial.println(F("%"));
-    applyModeFanOutput();
-    markManualPersistence(now);
+  if (events.up.pressed) {
+    upButtonStep.pressed();
+    enterManualFromFanButton(F("UP"));
+  }
+  if (events.up.shortPress) {
+    enterManualFromFanButton(F("UP"));
+    applyManualFanButtonPercent(F("UP short"),
+                                upButtonStep.shortUp(manualFanPercent),
+                                now);
+  }
+  if (events.up.repeatPress) {
+    enterManualFromFanButton(F("UP"));
+    applyManualFanButtonPercent(F("UP hold"),
+                                upButtonStep.repeatUp(manualFanPercent),
+                                now);
+  }
+  if (events.up.released) {
+    upButtonStep.released();
   }
 
-  if (events.down.pressed || events.down.repeatPress) {
-    if (appMode != AppMode::Manual) {
-      appMode = AppMode::Manual;
-      Serial.println(F("DOWN: mode=MANUAL"));
-    }
-    manualFanPercent = clampPercent(static_cast<int>(manualFanPercent) - 1);
-    Serial.print(F("DOWN: manual fan="));
-    Serial.print(manualFanPercent);
-    Serial.println(F("%"));
-    applyModeFanOutput();
-    markManualPersistence(now);
+  if (events.down.pressed) {
+    downButtonStep.pressed();
+    enterManualFromFanButton(F("DOWN"));
+  }
+  if (events.down.shortPress) {
+    enterManualFromFanButton(F("DOWN"));
+    applyManualFanButtonPercent(F("DOWN short"),
+                                downButtonStep.shortDown(manualFanPercent),
+                                now);
+  }
+  if (events.down.repeatPress) {
+    enterManualFromFanButton(F("DOWN"));
+    applyManualFanButtonPercent(F("DOWN hold"),
+                                downButtonStep.repeatDown(manualFanPercent),
+                                now);
+  }
+  if (events.down.released) {
+    downButtonStep.released();
   }
 }
 
